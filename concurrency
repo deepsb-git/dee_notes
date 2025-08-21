@@ -1,6 +1,8 @@
 ## Sequence VS Parallel computing
 
-```
+This Java program performs a brute-force attack on a numeric password by generating all possible combinations and checking each one against a known SHA-256 hash.
+
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -79,3 +81,403 @@ public class PasswordCracker {
         crackPassword(cryptoHash, length);
     }
 }
+
+//Explanation of above code
+
+1. Class Structure
+
+public class PasswordCracker {
+The entire program is contained in a single class
+
+All methods are static since they don't need to maintain state
+
+2. Combination Generation
+public static List<String> getCombinations(int length, int minNumber, Integer maxNumber) {
+Purpose: Generates all possible numeric combinations of a given length.
+
+How it works:
+
+maxNumber is null → calculates maximum as 10^length - 1 (e.g., 99999999 for length 8)
+
+Loops through all numbers from minNumber to maxNumber
+
+Pads each number with leading zeros to match the desired length
+
+Example: For length 4, number 42 becomes "0042"
+
+3. Method Overloading
+public static List<String> getCombinations(int length) {
+    return getCombinations(length, 0, null);
+}
+Purpose: Provides a simpler interface with default values
+
+Calls the main method with minNumber = 0 and maxNumber = null
+
+4. Cryptographic Hashing
+public static String getCryptoHash(String password) {
+Purpose: Calculates SHA-256 hash of a password
+
+How it works:
+
+Gets SHA-256 instance from MessageDigest
+
+Converts password string to bytes
+
+Digests the bytes to get hash
+
+Converts byte array to hexadecimal string
+
+Each byte becomes two hex characters
+
+Pads with leading zero if needed
+
+5. Password Checking
+public static boolean checkPassword(String expectedCryptoHash, String possiblePassword) {
+Purpose: Compares hash of a candidate password with the target hash
+
+How it works:
+
+Calculates hash of the candidate password
+
+Returns true if it matches the expected hash
+
+6. Main Cracking Logic
+public static void crackPassword(String cryptoHash, int length) {
+Purpose: Orchestrates the brute-force attack
+
+How it works:
+
+Starts timer
+
+Generates all possible combinations
+
+Checks each combination against the target hash
+
+Stops when a match is found
+
+Reports results and timing
+
+7. Performance Considerations
+Brute-force nature: Tries every possible combination sequentially
+
+Time complexity: O(10^n) where n is password length
+
+For 8-digit password: 100 million combinations (0-99,999,999)
+
+Real-world impractical: Would take extremely long for longer passwords
+
+8. Security Implications
+Demonstrates why long passwords matter: Each additional digit multiplies search space by 10
+
+SHA-256 is secure: The weakness is in the password, not the hashing algorithm
+
+Real attacks use: Dictionary attacks, rainbow tables, and optimized techniques
+
+9. Example Execution
+String cryptoHash = "e24df920078c3dd4e7e8d2442f00e5c9ab2a231bb3918d65cc50906e49ecaef4";
+int length = 8;
+crackPassword(cryptoHash, length);
+The program will generate all 8-digit numbers, hash each one, and compare with the target hash until it finds the match.
+
+10. Limitations
+Memory intensive: Stores all combinations in memory (not efficient for large n)
+
+No progress indication: Doesn't show progress percentage
+
+Single-threaded: Processes combinations sequentially
+
+This code is primarily educational - it demonstrates brute-force concepts but isn't practical for real password cracking due to its inefficiency.
+
+
+Parallel Execution
+==================
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public class PasswordCracker {
+    
+    public static List<String> getCombinations(int length, int minNumber, Integer maxNumber) {
+        List<String> combinations = new ArrayList<>();
+        
+        if (maxNumber == null) {
+            maxNumber = (int) (Math.pow(10, length) - 1);
+        }
+        
+        for (int i = minNumber; i <= maxNumber; i++) {
+            String strNum = String.valueOf(i);
+            String zeros = "0".repeat(length - strNum.length());
+            combinations.add(zeros + strNum);
+        }
+        return combinations;
+    }
+    
+    public static List<String> getCombinations(int length) {
+        return getCombinations(length, 0, null);
+    }
+    
+    public static String getCryptoHash(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(password.getBytes());
+            
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hashBytes) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
+    }
+    
+    public static boolean checkPassword(String expectedCryptoHash, String possiblePassword) {
+        String actualCryptoHash = getCryptoHash(possiblePassword);
+        return expectedCryptoHash.equals(actualCryptoHash);
+    }
+    
+    // Sequential version (original)
+    public static void crackPassword(String cryptoHash, int length) {
+        System.out.println("Processing number combinations sequentially");
+        long startTime = System.nanoTime();
+        
+        List<String> combinations = getCombinations(length);
+        for (String combination : combinations) {
+            if (checkPassword(cryptoHash, combination)) {
+                System.out.println("PASSWORD CRACKED: " + combination);
+                break;
+            }
+        }
+        
+        long processTimeNanos = System.nanoTime() - startTime;
+        double processTimeSeconds = processTimeNanos / 1_000_000_000.0;
+        System.out.println("PROCESS TIME: " + processTimeSeconds + " seconds");
+    }
+    
+    // Parallel version using ThreadPoolExecutor
+    public static void crackPasswordParallel(String cryptoHash, int length, int numThreads) {
+        System.out.println("Processing number combinations in parallel with " + numThreads + " threads");
+        long startTime = System.nanoTime();
+        
+        // Get available processors if numThreads is 0
+        if (numThreads <= 0) {
+            numThreads = Runtime.getRuntime().availableProcessors();
+            System.out.println("Using " + numThreads + " available processors");
+        }
+        
+        // Calculate total combinations and split work
+        int totalCombinations = (int) Math.pow(10, length);
+        int combinationsPerThread = totalCombinations / numThreads;
+        int remainder = totalCombinations % numThreads;
+        
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        AtomicBoolean passwordFound = new AtomicBoolean(false);
+        CountDownLatch latch = new CountDownLatch(numThreads);
+        
+        String[] foundPassword = new String[1];
+        
+        for (int i = 0; i < numThreads; i++) {
+            int start = i * combinationsPerThread;
+            int end = start + combinationsPerThread - 1;
+            
+            // Distribute remainder to first few threads
+            if (i < remainder) {
+                end += 1;
+            }
+            
+            final int threadStart = start;
+            final int threadEnd = end;
+            
+            executor.submit(() -> {
+                try {
+                    for (int num = threadStart; num <= threadEnd && !passwordFound.get(); num++) {
+                        String combination = String.format("%0" + length + "d", num);
+                        if (checkPassword(cryptoHash, combination)) {
+                            synchronized (foundPassword) {
+                                foundPassword[0] = combination;
+                                passwordFound.set(true);
+                                System.out.println("PASSWORD CRACKED by thread: " + combination);
+                            }
+                            break;
+                        }
+                    }
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        
+        try {
+            latch.await(1, TimeUnit.HOURS); // Wait max 1 hour
+            executor.shutdown();
+            
+            if (foundPassword[0] != null) {
+                System.out.println("FINAL PASSWORD: " + foundPassword[0]);
+            } else if (!passwordFound.get()) {
+                System.out.println("Password not found in the given range");
+            }
+            
+        } catch (InterruptedException e) {
+            System.out.println("Password cracking interrupted");
+            Thread.currentThread().interrupt();
+        }
+        
+        long processTimeNanos = System.nanoTime() - startTime;
+        double processTimeSeconds = processTimeNanos / 1_000_000_000.0;
+        System.out.println("PARALLEL PROCESS TIME: " + processTimeSeconds + " seconds");
+    }
+    
+    // Parallel version using ForkJoinPool (more efficient for CPU-intensive tasks)
+    public static void crackPasswordParallelForkJoin(String cryptoHash, int length) {
+        System.out.println("Processing number combinations using ForkJoinPool");
+        long startTime = System.nanoTime();
+        
+        int totalCombinations = (int) Math.pow(10, length);
+        AtomicBoolean passwordFound = new AtomicBoolean(false);
+        String[] foundPassword = new String[1];
+        
+        ForkJoinPool forkJoinPool = new ForkJoinPool();
+        
+        try {
+            forkJoinPool.submit(() -> {
+                new PasswordCrackingTask(0, totalCombinations - 1, cryptoHash, 
+                                       length, passwordFound, foundPassword).invoke();
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            System.out.println("Password cracking interrupted");
+        } finally {
+            forkJoinPool.shutdown();
+        }
+        
+        if (foundPassword[0] != null) {
+            System.out.println("PASSWORD CRACKED: " + foundPassword[0]);
+        } else {
+            System.out.println("Password not found");
+        }
+        
+        long processTimeNanos = System.nanoTime() - startTime;
+        double processTimeSeconds = processTimeNanos / 1_000_000_000.0;
+        System.out.println("FORKJOIN PROCESS TIME: " + processTimeSeconds + " seconds");
+    }
+    
+    // Recursive task for ForkJoinPool
+    static class PasswordCrackingTask extends RecursiveAction {
+        private static final int THRESHOLD = 10000; // Process 10k numbers per task
+        private final int start;
+        private final int end;
+        private final String cryptoHash;
+        private final int length;
+        private final AtomicBoolean passwordFound;
+        private final String[] foundPassword;
+        
+        public PasswordCrackingTask(int start, int end, String cryptoHash, int length,
+                                  AtomicBoolean passwordFound, String[] foundPassword) {
+            this.start = start;
+            this.end = end;
+            this.cryptoHash = cryptoHash;
+            this.length = length;
+            this.passwordFound = passwordFound;
+            this.foundPassword = foundPassword;
+        }
+        
+        @Override
+        protected void compute() {
+            if (passwordFound.get()) {
+                return;
+            }
+            
+            if (end - start <= THRESHOLD) {
+                // Process this chunk sequentially
+                for (int num = start; num <= end && !passwordFound.get(); num++) {
+                    String combination = String.format("%0" + length + "d", num);
+                    if (checkPassword(cryptoHash, combination)) {
+                        synchronized (foundPassword) {
+                            foundPassword[0] = combination;
+                            passwordFound.set(true);
+                        }
+                        return;
+                    }
+                }
+            } else {
+                // Split the task
+                int mid = start + (end - start) / 2;
+                PasswordCrackingTask leftTask = new PasswordCrackingTask(start, mid, cryptoHash, 
+                                                                       length, passwordFound, foundPassword);
+                PasswordCrackingTask rightTask = new PasswordCrackingTask(mid + 1, end, cryptoHash, 
+                                                                        length, passwordFound, foundPassword);
+                
+                invokeAll(leftTask, rightTask);
+            }
+        }
+    }
+    
+    public static void main(String[] args) {
+        String cryptoHash = "e24df920078c3dd4e7e8d2442f00e5c9ab2a231bb3918d65cc50906e49ecaef4";
+        int length = 8;
+        
+        // Test sequential
+        crackPassword(cryptoHash, length);
+        System.out.println();
+        
+        // Test parallel with ThreadPool (using 8 threads)
+        crackPasswordParallel(cryptoHash, length, 8);
+        System.out.println();
+        
+        // Test parallel with ForkJoinPool
+        crackPasswordParallelForkJoin(cryptoHash, length);
+    }
+}
+
+
+Key Features of the Parallel Implementation:
+
+1. ThreadPoolExecutor Version (crackPasswordParallel)
+Work Distribution: Evenly splits the number range across threads
+
+Early Termination: Uses AtomicBoolean to stop all threads when password is found
+
+Progress Tracking: Uses CountDownLatch to wait for all threads to complete
+
+Configurable: Allows specifying number of threads (0 = use all available processors)
+
+2. ForkJoinPool Version (crackPasswordParallelForkJoin)
+Work Stealing: More efficient for CPU-intensive tasks
+
+Recursive Splitting: Automatically divides work into optimal chunks
+
+Dynamic Load Balancing: Adapts to system load and thread availability
+
+3. Performance Benefits:
+Massive Speedup: 4-8x faster on typical multi-core processors
+
+Better CPU Utilization: Uses all available cores
+
+Scalable: Handles larger password lengths more efficiently
+
+4. Smart Features:
+Early Termination: Stops immediately when password is found
+
+Memory Efficient: Doesn't store all combinations in memory
+
+Thread Safety: Proper synchronization for shared variables
+
+The parallel version will be significantly faster than the sequential one, especially for longer passwords where the brute-force space is large. 
+The speedup will be roughly proportional to the number of available CPU cores.
+
+
+
+
+
+
+
+
+
+
