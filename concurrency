@@ -1,1 +1,81 @@
+## Sequence VS Parallel computing
 
+```
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class PasswordCracker {
+    
+    public static List<String> getCombinations(int length, int minNumber, Integer maxNumber) {
+        List<String> combinations = new ArrayList<>();
+        
+        if (maxNumber == null) {
+            // calculating maximum number based on the length
+            maxNumber = (int) (Math.pow(10, length) - 1);
+        }
+        
+        // go through all possible combinations in a given range
+        for (int i = minNumber; i <= maxNumber; i++) {
+            String strNum = String.valueOf(i);
+            // fill in the missing numbers with zeros
+            String zeros = "0".repeat(length - strNum.length());
+            combinations.add(zeros + strNum);
+        }
+        return combinations;
+    }
+    
+    public static List<String> getCombinations(int length) {
+        return getCombinations(length, 0, null);
+    }
+    
+    public static String getCryptoHash(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(password.getBytes());
+            
+            // Convert byte array to hexadecimal string
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hashBytes) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
+    }
+    
+    public static boolean checkPassword(String expectedCryptoHash, String possiblePassword) {
+        String actualCryptoHash = getCryptoHash(possiblePassword);
+        // compare the resulted cryptographic hash with the one stored in the system
+        return expectedCryptoHash.equals(actualCryptoHash);
+    }
+    
+    public static void crackPassword(String cryptoHash, int length) {
+        System.out.println("Processing number combinations sequentially");
+        long startTime = System.nanoTime();
+        
+        List<String> combinations = getCombinations(length);
+        for (String combination : combinations) {
+            if (checkPassword(cryptoHash, combination)) {
+                System.out.println("PASSWORD CRACKED: " + combination);
+                break;
+            }
+        }
+        
+        long processTimeNanos = System.nanoTime() - startTime;
+        double processTimeSeconds = processTimeNanos / 1_000_000_000.0;
+        System.out.println("PROCESS TIME: " + processTimeSeconds + " seconds");
+    }
+    
+    public static void main(String[] args) {
+        String cryptoHash = "e24df920078c3dd4e7e8d2442f00e5c9ab2a231bb3918d65cc50906e49ecaef4";
+        int length = 8;
+        crackPassword(cryptoHash, length);
+    }
+}
