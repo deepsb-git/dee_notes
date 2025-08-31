@@ -1,0 +1,25 @@
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+If a duplicate port is running on a machine, use the command below to terminate it.
+
+C:\Users\Admin>netstat -ano | findstr :8080
+  TCP    0.0.0.0:8080           0.0.0.0:0              LISTENING       246
+  TCP    [::]:8080              [::]:0                 LISTENING       246
+  TCP    [::1]:8080             [::1]:53517            TIME_WAIT       0
+  TCP    [::1]:8080             [::1]:56330            TIME_WAIT       0
+  TCP    [::1]:8080             [::1]:57496            TIME_WAIT       0
+  TCP    [::1]:8080             [::1]:58952            TIME_WAIT       0
+  TCP    [::1]:8080             [::1]:65103            TIME_WAIT       0
+
+C:\Users\Admin>tasklist | findstr 24648
+java.exe                     246 Console                    1   2,33,3 K
+
+C:\Users\Admin>taskkill /PID 246 /F
+SUCCESS: The process with PID 246 has been terminated.
+
+C:\Users\Admin>netstat -ano | findstr :8080
